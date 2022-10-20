@@ -7,11 +7,11 @@ import {
   getMasterEdition,
   getMetadata,
 } from "./helpers";
+import * as borsh from "borsh";
 import {
   PROGRAM_ID as TOKEN_METADATA_PROGRAM_ID,
   TokenStandard,
 } from "@metaplex-foundation/mpl-token-metadata";
-import { PROGRAM_ID as GummyrollProgramId } from "@sorend-solana/gummyroll";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   Token,
@@ -31,7 +31,6 @@ import { WrappedConnection } from "./wrappedConnection";
 import { bs58 } from "@project-serum/anchor/dist/cjs/utils/bytes";
 import { BN } from "@project-serum/anchor";
 import {
-  metadataArgsBeet,
   TokenProgramVersion,
   createCreateTreeInstruction,
   PROGRAM_ID as BUBBLEGUM_PROGRAM_ID,
@@ -40,6 +39,7 @@ import {
   createDecompressV1Instruction,
   createRedeemInstruction,
   MetadataArgs,
+  metadataArgsBeet,
   Creator,
 } from "@metaplex-foundation/mpl-bubblegum";
 import {
@@ -47,7 +47,6 @@ import {
   getConcurrentMerkleTreeAccountSize,
   SPL_NOOP_PROGRAM_ID,
 } from "@solana/spl-account-compression";
-
 const makeCompressedNFT = (
   name: string,
   symbol: string,
@@ -69,6 +68,10 @@ const makeCompressedNFT = (
   };
 };
 
+const sleep = async (ms: any) => {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+};
+
 const setupTreeWithCompressedNFT = async (
   connectionWrapper: WrappedConnection,
   payerKeypair: Keypair,
@@ -77,7 +80,6 @@ const setupTreeWithCompressedNFT = async (
   maxBufferSize: number = 64
 ) => {
   const payer = payerKeypair.publicKey;
-
   const merkleTreeKeypair = Keypair.generate();
   const merkleTree = merkleTreeKeypair.publicKey;
   const space = getConcurrentMerkleTreeAccountSize(maxDepth, maxBufferSize);
@@ -107,7 +109,6 @@ const setupTreeWithCompressedNFT = async (
     },
     BUBBLEGUM_PROGRAM_ID
   );
-
   const mintIx = createMintV1Instruction(
     {
       merkleTree,
@@ -123,7 +124,6 @@ const setupTreeWithCompressedNFT = async (
       message: compressedNFT,
     }
   );
-
   let tx = new Transaction().add(allocTreeIx).add(createTreeIx).add(mintIx);
   tx.feePayer = payer;
   await sendAndConfirmTransaction(
@@ -135,41 +135,34 @@ const setupTreeWithCompressedNFT = async (
       skipPreflight: true,
     }
   );
-
   return {
     merkleTree,
-    payer,
   };
 };
-
 const transferAsset = async (
   connectionWrapper: WrappedConnection,
   newOwner: Keypair,
-  assetId?: string,
   asset?: any,
-  assetProof?: any
+  assetProof?: any,
+  assetId?: string
 ) => {
   const _assetProof = assetProof
     ? assetProof
     : await connectionWrapper.getAssetProof(assetId);
-
   const _asset = asset ? asset : await connectionWrapper.getAsset(assetId);
 
   const nonceCount = await getNonceCount(
     connectionWrapper.provider.connection,
-    _assetProof.tree_id
-  );
-
-  const leafNonce = nonceCount.sub(new BN(1));
-
-  const treeAuthority = await getBubblegumAuthorityPDA(
     new PublicKey(_assetProof.tree_id)
   );
 
+  const leafNonce = nonceCount.sub(new BN(1));
+  const treeAuthority = await getBubblegumAuthorityPDA(
+    new PublicKey(_assetProof.tree_id)
+  );
   const leafDelegate = _asset.ownership.delegate
     ? new PublicKey(_asset.ownership.delegate)
     : new PublicKey(_asset.ownership.owner);
-
   let transferIx = createTransferInstruction(
     {
       treeAuthority,
@@ -178,7 +171,7 @@ const transferAsset = async (
       newLeafOwner: newOwner.publicKey,
       merkleTree: new PublicKey(_assetProof.tree_id),
       logWrapper: SPL_NOOP_PROGRAM_ID,
-      compressionProgram: GummyrollProgramId,
+      compressionProgram: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID,
     },
     {
       root: bufferToArray(bs58.decode(_assetProof.root)),
@@ -197,30 +190,25 @@ const transferAsset = async (
     true
   );
 };
-
 const redeemAsset = async (
   connectionWrapper: WrappedConnection,
   nonce = new BN(0),
-  assetId?: string,
   asset?: any,
   assetProof?: any,
-  payer?: Keypair
+  payer?: Keypair,
+  assetId?: string
 ) => {
   const _assetProof = assetProof
     ? assetProof
     : await connectionWrapper.getAssetProof(assetId);
-
   const _asset = asset ? asset : await connectionWrapper.getAsset(assetId);
-
   const voucher = await getVoucherPDA(new PublicKey(_assetProof.tree_id), 0);
   const treeAuthority = await getBubblegumAuthorityPDA(
     new PublicKey(_assetProof.tree_id)
   );
-
   const leafDelegate = _asset.ownership.delegate
     ? new PublicKey(_asset.ownership.delegate)
     : new PublicKey(_asset.ownership.owner);
-
   const redeemIx = createRedeemInstruction(
     {
       treeAuthority,
@@ -229,7 +217,7 @@ const redeemAsset = async (
       merkleTree: new PublicKey(_assetProof.tree_id),
       voucher,
       logWrapper: SPL_NOOP_PROGRAM_ID,
-      compressionProgram: GummyrollProgramId,
+      compressionProgram: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID,
     },
     {
       root: bufferToArray(bs58.decode(_assetProof.root)),
@@ -241,7 +229,6 @@ const redeemAsset = async (
       index: 0,
     }
   );
-
   const _payer = payer ? payer : connectionWrapper.provider.wallet;
   await execute(
     connectionWrapper.provider,
@@ -253,25 +240,24 @@ const redeemAsset = async (
 
 async function decompressAsset(
   connectionWrapper: WrappedConnection,
-  assetId?: string,
+  compressedNFT: any,
   asset?: any,
   assetProof?: any,
-  payer?: Keypair
+  payer?: Keypair,
+  assetId?: string
 ) {
   const _assetProof = assetProof
     ? assetProof
     : await connectionWrapper.getAssetProof(assetId);
-
   const _asset = asset ? asset : await connectionWrapper.getAsset(assetId);
   const voucher = await getVoucherPDA(new PublicKey(_assetProof.tree_id), 0);
-
   const nonceCount = await getNonceCount(
     connectionWrapper.provider.connection,
     new PublicKey(_assetProof.tree_id)
   );
   const leafNonce = nonceCount.sub(new BN(1));
 
-  redeemAsset(connectionWrapper, leafNonce, _asset, _assetProof, payer);
+  await redeemAsset(connectionWrapper, leafNonce, _asset, _assetProof, payer);
 
   let [assetPDA] = await PublicKey.findProgramAddress(
     [
@@ -281,57 +267,54 @@ async function decompressAsset(
     ],
     BUBBLEGUM_PROGRAM_ID
   );
-
   const [mintAuthority] = await PublicKey.findProgramAddress(
     [assetPDA.toBuffer()],
     BUBBLEGUM_PROGRAM_ID
   );
 
-  const metadata_deser = metadataArgsBeet.deserialize(
-    bs58.decode(_asset.compression.data_hash.trim())
-  )[0];
+  sleep(20000);
+  const assetAgain = await connectionWrapper.getAsset(asset.id);
 
   const metadata: MetadataArgs = {
-    name: metadata_deser.name,
-    symbol: metadata_deser.symbol,
-    uri: metadata_deser.uri,
-    sellerFeeBasisPoints: metadata_deser.sellerFeeBasisPoints,
-    primarySaleHappened: metadata_deser.primarySaleHappened,
-    isMutable: metadata_deser.isMutable,
-    editionNonce: metadata_deser.editionNonce,
-    tokenStandard: metadata_deser.tokenStandard,
-    collection: metadata_deser.collection,
-    uses: metadata_deser.uses,
-    tokenProgramVersion: metadata_deser.tokenProgramVersion,
-    creators: metadata_deser.creators,
+    name: compressedNFT.name,
+    symbol: compressedNFT.symbol,
+    uri: compressedNFT.uri,
+    sellerFeeBasisPoints: compressedNFT.sellerFeeBasisPoints,
+    primarySaleHappened: compressedNFT.primarySaleHappened,
+    isMutable: compressedNFT.isMutable,
+    editionNonce: compressedNFT.editionNonce,
+    tokenStandard: compressedNFT.tokenStandard,
+    collection: compressedNFT.collection,
+    uses: compressedNFT.uses,
+    tokenProgramVersion: compressedNFT.tokenProgramVersion,
+    creators: compressedNFT.creators,
   };
-
   const decompressIx = createDecompressV1Instruction(
     {
       voucher: voucher,
-      leafOwner: new PublicKey(_asset.ownership.owner),
+      leafOwner: new PublicKey(assetAgain.ownership.owner),
       tokenAccount: await Token.getAssociatedTokenAddress(
         ASSOCIATED_TOKEN_PROGRAM_ID,
         TOKEN_PROGRAM_ID,
-        _asset.id,
-        _asset.ownership.owner
+        new PublicKey(assetAgain.id),
+        new PublicKey(assetAgain.ownership.owner)
       ),
-      mint: new PublicKey(_asset.id),
+      mint: new PublicKey(assetAgain.id),
       mintAuthority: mintAuthority,
-      metadata: await getMetadata(_asset),
-      masterEdition: await getMasterEdition(_asset),
+      metadata: await getMetadata(new PublicKey(assetAgain.id)),
+      masterEdition: await getMasterEdition(new PublicKey(assetAgain.id)),
       sysvarRent: SYSVAR_RENT_PUBKEY,
       tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       logWrapper: SPL_NOOP_PROGRAM_ID,
     },
     {
+      // this can be grabbed onChain by using the metadataArgsBeet.deserialize
+      // currently there is an error inside beet program while using it
       metadata,
     }
   );
-
   const _payer = payer ? payer : connectionWrapper.provider.wallet;
-
   await execute(
     connectionWrapper.provider,
     [decompressIx],
@@ -343,20 +326,22 @@ async function decompressAsset(
 const wholeFlow = async () => {
   const rpcUrl = "";
   const connectionString = "";
+  // set up connection object
+  // provides all connection functions and rpc functions
   const connectionWrapper = new WrappedConnection(
     Keypair.generate(),
     connectionString,
     rpcUrl
   );
-
   console.log("payer", connectionWrapper.provider.wallet.publicKey.toBase58());
   await connectionWrapper.requestAirdrop(
     connectionWrapper.payer.publicKey,
     2 * LAMPORTS_PER_SOL
   );
-
+  // returns filled out metadata args struct, doesn't actually do anything mint wise
   let originalCompressedNFT = makeCompressedNFT("test", "TST");
-
+  // creates  and executes the merkle tree ix
+  // and the mint ix is executed here as well
   let result = await setupTreeWithCompressedNFT(
     connectionWrapper,
     connectionWrapper.payer,
@@ -365,9 +350,8 @@ const wholeFlow = async () => {
     64
   );
   const merkleTree = result.merkleTree;
-
   const leafIndex = new BN.BN(0);
-
+  // grabbing the asset id so that it can be passed to transfer
   const [assetId] = await PublicKey.findProgramAddress(
     [
       Buffer.from("asset", "utf8"),
@@ -377,18 +361,43 @@ const wholeFlow = async () => {
     BUBBLEGUM_PROGRAM_ID
   );
 
-  const assetProof = await connectionWrapper.getAssetProof(assetId);
+  await sleep(15000);
+  const assetString = assetId.toBase58();
+  const assetPreTransfer = await connectionWrapper.getAsset(assetString);
+  const assetProofPreTransfer = await connectionWrapper.getAssetProof(
+    assetString
+  );
 
-  const asset = await connectionWrapper.getAsset(assetId);
   const newOwner = Keypair.generate();
   console.log("new owner", newOwner.publicKey.toBase58());
+  sleep(120000);
   await connectionWrapper.requestAirdrop(
     newOwner.publicKey,
     2 * LAMPORTS_PER_SOL
   );
 
-  await transferAsset(connectionWrapper, newOwner, asset, assetProof);
-  await decompressAsset(connectionWrapper, asset, assetProof, newOwner);
+  // transferring the compressed asset to a new owner
+  await transferAsset(
+    connectionWrapper,
+    newOwner,
+    assetPreTransfer,
+    assetProofPreTransfer
+  );
+  // asset has to be redeemed before it can be decompressed
+  // redeem is included above as a separate function because it can be called
+  // without decompressing nftbut it is also called
+  // inside of decompress so we don't need to call that separately here
+  sleep(15000);
+  // need to refetch from DB to get new owner change of ownership.owner
+  const asset = await connectionWrapper.getAsset(assetString);
+  const assetProof = await connectionWrapper.getAssetProof(assetString);
+  await decompressAsset(
+    connectionWrapper,
+    originalCompressedNFT,
+    asset,
+    assetProof,
+    newOwner
+  );
 };
 
 wholeFlow();
