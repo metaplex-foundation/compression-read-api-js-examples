@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist",
+    "baseUrl": "."
+  },
+  "include": ["./index.ts"],
+  "exclude": ["node_modules", "dist", "build", "lib"]
+}
