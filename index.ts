@@ -56,11 +56,11 @@ const makeCompressedNFT = (
   return {
     name: name,
     symbol: symbol,
-    uri: "https://metaplex.com",
+    uri: "https://usd363wqbeq4xmuyddhbicmvm5yzegh4ulnsmp67jebxi6mqe45q.arweave.net/pIe_btAJIcuymBjOFAmVZ3GSGPyi2yY_30kDdHmQJzs",
     creators,
     editionNonce: 0,
     tokenProgramVersion: TokenProgramVersion.Original,
-    tokenStandard: TokenStandard.Fungible,
+    tokenStandard: TokenStandard.NonFungible,
     uses: null,
     collection: null,
     primarySaleHappened: false,
