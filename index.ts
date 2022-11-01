@@ -106,6 +106,7 @@ const setupTreeWithCompressedNFT = async (
     {
       maxBufferSize,
       maxDepth,
+      public: false,
     },
     BUBBLEGUM_PROGRAM_ID
   );
