@@ -7,7 +7,6 @@ import {
   getMasterEdition,
   getMetadata,
 } from "./helpers";
-import * as borsh from "borsh";
 import {
   PROGRAM_ID as TOKEN_METADATA_PROGRAM_ID,
   TokenStandard,
@@ -19,7 +18,7 @@ import {
 } from "@solana/spl-token";
 import {
   Keypair,
-  LAMPORTS_PER_SOL,
+  // LAMPORTS_PER_SOL,
   PublicKey,
   sendAndConfirmTransaction,
   Signer,
@@ -39,7 +38,6 @@ import {
   createDecompressV1Instruction,
   createRedeemInstruction,
   MetadataArgs,
-  metadataArgsBeet,
   Creator,
 } from "@metaplex-foundation/mpl-bubblegum";
 import {
@@ -47,17 +45,18 @@ import {
   getConcurrentMerkleTreeAccountSize,
   SPL_NOOP_PROGRAM_ID,
 } from "@solana/spl-account-compression";
+
 const makeCompressedNFT = (
   name: string,
   symbol: string,
   creators: Creator[] = []
 ) => {
   return {
-    name: name,
-    symbol: symbol,
-    uri: "https://usd363wqbeq4xmuyddhbicmvm5yzegh4ulnsmp67jebxi6mqe45q.arweave.net/pIe_btAJIcuymBjOFAmVZ3GSGPyi2yY_30kDdHmQJzs",
-    creators,
-    editionNonce: 0,
+    name: "Degen Ape #1338",
+    symbol: "DAPE",
+    uri: "https://arweave.net/gfO_TkYttQls70pTmhrdMDz9pfMUXX8hZkaoIivQjGs",
+    creators: [],
+    editionNonce: 253,
     tokenProgramVersion: TokenProgramVersion.Original,
     tokenStandard: TokenStandard.NonFungible,
     uses: null,
@@ -140,6 +139,7 @@ const setupTreeWithCompressedNFT = async (
     merkleTree,
   };
 };
+//@ts-ignore
 const transferAsset = async (
   connectionWrapper: WrappedConnection,
   newOwner: Keypair,
@@ -241,7 +241,6 @@ const redeemAsset = async (
 
 async function decompressAsset(
   connectionWrapper: WrappedConnection,
-  compressedNFT: any,
   asset?: any,
   assetProof?: any,
   payer?: Keypair,
@@ -277,19 +276,20 @@ async function decompressAsset(
   const assetAgain = await connectionWrapper.getAsset(asset.id);
 
   const metadata: MetadataArgs = {
-    name: compressedNFT.name,
-    symbol: compressedNFT.symbol,
-    uri: compressedNFT.uri,
-    sellerFeeBasisPoints: compressedNFT.sellerFeeBasisPoints,
-    primarySaleHappened: compressedNFT.primarySaleHappened,
-    isMutable: compressedNFT.isMutable,
-    editionNonce: compressedNFT.editionNonce,
-    tokenStandard: compressedNFT.tokenStandard,
-    collection: compressedNFT.collection,
-    uses: compressedNFT.uses,
-    tokenProgramVersion: compressedNFT.tokenProgramVersion,
-    creators: compressedNFT.creators,
+    name: _asset.content.metadata.name,
+    symbol: _asset.content.metadata.symbol,
+    uri: _asset.content.json_uri,
+    sellerFeeBasisPoints: _asset.royalty.basis_points,
+    primarySaleHappened: _asset.royalty.primary_sale_happened,
+    isMutable: _asset.mutable,
+    editionNonce: _asset.supply.edition_nonce,
+    tokenStandard: TokenStandard.NonFungible,
+    collection: _asset.grouping,
+    uses: _asset.uses,
+    tokenProgramVersion: TokenProgramVersion.Original,
+    creators: _asset.creators,
   };
+
   const decompressIx = createDecompressV1Instruction(
     {
       voucher: voucher,
@@ -335,10 +335,10 @@ const wholeFlow = async () => {
     rpcUrl
   );
   console.log("payer", connectionWrapper.provider.wallet.publicKey.toBase58());
-  await connectionWrapper.requestAirdrop(
-    connectionWrapper.payer.publicKey,
-    2 * LAMPORTS_PER_SOL
-  );
+  // await connectionWrapper.requestAirdrop(
+  //   connectionWrapper.payer.publicKey,
+  //   2 * LAMPORTS_PER_SOL
+  // );
   // returns filled out metadata args struct, doesn't actually do anything mint wise
   let originalCompressedNFT = makeCompressedNFT("test", "TST");
   // creates  and executes the merkle tree ix
@@ -364,26 +364,26 @@ const wholeFlow = async () => {
 
   await sleep(15000);
   const assetString = assetId.toBase58();
-  const assetPreTransfer = await connectionWrapper.getAsset(assetString);
-  const assetProofPreTransfer = await connectionWrapper.getAssetProof(
-    assetString
-  );
+  // const assetPreTransfer = await connectionWrapper.getAsset(assetString);
+  // const assetProofPreTransfer = await connectionWrapper.getAssetProof(
+  //   assetString
+  // );
 
   const newOwner = Keypair.generate();
   console.log("new owner", newOwner.publicKey.toBase58());
   sleep(120000);
-  await connectionWrapper.requestAirdrop(
-    newOwner.publicKey,
-    2 * LAMPORTS_PER_SOL
-  );
+  // await connectionWrapper.requestAirdrop(
+  //   newOwner.publicKey,
+  //   2 * LAMPORTS_PER_SOL
+  // );
 
   // transferring the compressed asset to a new owner
-  await transferAsset(
-    connectionWrapper,
-    newOwner,
-    assetPreTransfer,
-    assetProofPreTransfer
-  );
+  // await transferAsset(
+  //   connectionWrapper,
+  //   newOwner,
+  //   assetPreTransfer,
+  //   assetProofPreTransfer
+  // );
   // asset has to be redeemed before it can be decompressed
   // redeem is included above as a separate function because it can be called
   // without decompressing nftbut it is also called
@@ -394,10 +394,9 @@ const wholeFlow = async () => {
   const assetProof = await connectionWrapper.getAssetProof(assetString);
   await decompressAsset(
     connectionWrapper,
-    originalCompressedNFT,
     asset,
     assetProof,
-    newOwner
+    connectionWrapper.payer
   );
 };
 
