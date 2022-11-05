@@ -8,9 +8,9 @@ The state data of uncompressed NFTs is all stored in on-chain accounts.  This is
 
 Compressed NFTs are secured on-chain by hashing their state data when it is added to the Merkle tree.  The Merkle root is a hash that cryptographically secures the state data for all of the leaves (NFTs) contained in the tree.
 
-`Bubblegum` is the Metaplex Protocol program for creating and interacting with compressed Metaplex NFTs.  See the [Bubblegum README](https://github.com/metaplex-foundation/metaplex-program-library/blob/master/bubblegum/program/README.md) for more information on the Bubblegum program.
+**Bubblegum** is the Metaplex Protocol program for creating and interacting with compressed Metaplex NFTs.  See the [Bubblegum README](https://github.com/metaplex-foundation/metaplex-program-library/blob/master/bubblegum/program/README.md) for more information on the Bubblegum program.
 
-Compressed NFTs involve some extra complexity, such as sending Merkle proofs and Nonce values to Bubblegum instructions.  The `Digital Asset RPC API` enables easier interaction with the Bubblegum program and the Merkle trees with which Bubblegum interacts.  For example, the API can provide the Merkle proofs and Nonce information for an asset.
+Compressed NFTs involve some extra complexity, such as sending Merkle proofs and Nonce values to Bubblegum instructions.  The **Digital Asset RPC API** enables easier interaction with the Bubblegum program and the Merkle trees with which Bubblegum interacts.  For example, the API can provide the Merkle proofs and Nonce information for an asset.
 
 The Digital Asset RPC API also provides data for non-compresed NFTs, which facilitates easy handling of either compressed or non-compressed NFTs.
 
