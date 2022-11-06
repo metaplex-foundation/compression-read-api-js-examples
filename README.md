@@ -24,7 +24,19 @@ or
 https://mplx-devnet.genesysgo.net/
 
 ```
+
 You can also leave connection string blank as these above urls run both solana and metaplex RPC
+
+## NOTE AIRDROP FAUCET CAN BECOME EMPTY 
+If the airdrop faucet is empty and you get 
+```
+throw new SolanaJSONRPCError(
+            ^
+SolanaJSONRPCError: airdrop to 5ngQZG7aC4eZNPbYkgMc86NN2QmF918NckeLFEDXv7rp failed: Invalid request
+```
+
+If you get this then change line 342 `Keypair.generate()` to `Keypair.fromSeed("some seed")` and make sure to transfer some sol to that pubkey
+
 
 - Run `ts-node ./index.ts` 
 

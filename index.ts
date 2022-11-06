@@ -25,7 +25,7 @@ import {
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
   Transaction,
-  LAMPORTS_PER_SOL
+  LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
 import { WrappedConnection } from "./wrappedConnection";
 import { bs58 } from "@project-serum/anchor/dist/cjs/utils/bytes";
@@ -72,7 +72,6 @@ const sleep = async (ms: any) => {
   return new Promise((resolve) => setTimeout(resolve, ms));
 };
 
-
 /*
 
 
@@ -80,7 +79,6 @@ CREATE A NEW TREE and Mint one compressed NFT
 
 
 */
-
 
 const setupTreeWithCompressedNFT = async (
   connectionWrapper: WrappedConnection,
@@ -337,18 +335,18 @@ async function decompressAsset(
 
 const wholeFlow = async () => {
   const rpcUrl = "https://rpc-devnet.aws.metaplex.com/";
-  const connectionString = "https://api.devnet.solana.com/";
+  const connectionString = "https://mplx-devnet.genesysgo.net/";
   // set up connection object
   // provides all connection functions and rpc functions
   const connectionWrapper = new WrappedConnection(
-    Keypair.generate(),
+    Keypair.fromSeed(),
     connectionString,
     rpcUrl
   );
   console.log("payer", connectionWrapper.provider.wallet.publicKey.toBase58());
   await connectionWrapper.requestAirdrop(
     connectionWrapper.payer.publicKey,
-    LAMPORTS_PER_SOL / 2
+    LAMPORTS_PER_SOL
   );
   // returns filled out metadata args struct, doesn't actually do anything mint wise
   let originalCompressedNFT = makeCompressedNFT("test", "TST");
@@ -383,10 +381,7 @@ const wholeFlow = async () => {
   const newOwner = Keypair.generate();
   console.log("new owner", newOwner.publicKey.toBase58());
   sleep(120000);
-  await connectionWrapper.requestAirdrop(
-    newOwner.publicKey,
-    LAMPORTS_PER_SOL
-  );
+  await connectionWrapper.requestAirdrop(newOwner.publicKey, LAMPORTS_PER_SOL);
 
   //transferring the compressed asset to a new owner
   await transferAsset(
