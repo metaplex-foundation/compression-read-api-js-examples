@@ -17,6 +17,15 @@ The Digital Asset RPC API also provides data for non-compresed NFTs, which facil
 
 ## To run entire flow
 - Plug in values for `rpcUrl` and `connectionString` inside of `index.ts`
+For Example please use 
+```
+https://rpc-devnet.aws.metaplex.com/
+or
+https://mplx-devnet.genesysgo.net/
+
+```
+
+
 - Run `ts-node ./index.ts` 
 
 #### Connection Wrapper
