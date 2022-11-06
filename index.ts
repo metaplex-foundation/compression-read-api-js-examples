@@ -334,12 +334,12 @@ async function decompressAsset(
 }
 
 const wholeFlow = async () => {
-  const rpcUrl = "https://rpc-devnet.aws.metaplex.com/";
+  const rpcUrl = "https://mplx-devnet.genesysgo.net/";
   const connectionString = "https://mplx-devnet.genesysgo.net/";
   // set up connection object
   // provides all connection functions and rpc functions
   const connectionWrapper = new WrappedConnection(
-    Keypair.fromSeed(),
+    Keypair.generate(),
     connectionString,
     rpcUrl
   );
