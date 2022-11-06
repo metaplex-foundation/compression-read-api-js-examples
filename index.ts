@@ -71,6 +71,16 @@ const sleep = async (ms: any) => {
   return new Promise((resolve) => setTimeout(resolve, ms));
 };
 
+
+/*
+
+
+CREATE A NEW TREE and Mint one compressed NFT
+
+
+*/
+
+
 const setupTreeWithCompressedNFT = async (
   connectionWrapper: WrappedConnection,
   payerKeypair: Keypair,
@@ -325,8 +335,8 @@ async function decompressAsset(
 }
 
 const wholeFlow = async () => {
-  const rpcUrl = "";
-  const connectionString = "";
+  const rpcUrl = "https://rpc-devnet.aws.metaplex.com/";
+  const connectionString = "https://rpc-devnet.aws.metaplex.com/";
   // set up connection object
   // provides all connection functions and rpc functions
   const connectionWrapper = new WrappedConnection(
@@ -364,26 +374,26 @@ const wholeFlow = async () => {
 
   await sleep(15000);
   const assetString = assetId.toBase58();
-  // const assetPreTransfer = await connectionWrapper.getAsset(assetString);
-  // const assetProofPreTransfer = await connectionWrapper.getAssetProof(
-  //   assetString
-  // );
+  const assetPreTransfer = await connectionWrapper.getAsset(assetString);
+  const assetProofPreTransfer = await connectionWrapper.getAssetProof(
+    assetString
+  );
 
   const newOwner = Keypair.generate();
   console.log("new owner", newOwner.publicKey.toBase58());
   sleep(120000);
-  // await connectionWrapper.requestAirdrop(
-  //   newOwner.publicKey,
-  //   2 * LAMPORTS_PER_SOL
-  // );
+  await connectionWrapper.requestAirdrop(
+    newOwner.publicKey,
+    2 * LAMPORTS_PER_SOL
+  );
 
-  // transferring the compressed asset to a new owner
-  // await transferAsset(
-  //   connectionWrapper,
-  //   newOwner,
-  //   assetPreTransfer,
-  //   assetProofPreTransfer
-  // );
+  //transferring the compressed asset to a new owner
+  await transferAsset(
+    connectionWrapper,
+    newOwner,
+    assetPreTransfer,
+    assetProofPreTransfer
+  );
   // asset has to be redeemed before it can be decompressed
   // redeem is included above as a separate function because it can be called
   // without decompressing nftbut it is also called
