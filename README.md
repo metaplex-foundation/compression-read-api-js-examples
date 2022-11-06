@@ -24,7 +24,7 @@ or
 https://mplx-devnet.genesysgo.net/
 
 ```
-
+You can also leave connection string blank as these above urls run both solana and metaplex RPC
 
 - Run `ts-node ./index.ts` 
 
