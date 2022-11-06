@@ -25,6 +25,7 @@ import {
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
   Transaction,
+  LAMPORTS_PER_SOL
 } from "@solana/web3.js";
 import { WrappedConnection } from "./wrappedConnection";
 import { bs58 } from "@project-serum/anchor/dist/cjs/utils/bytes";
@@ -336,7 +337,7 @@ async function decompressAsset(
 
 const wholeFlow = async () => {
   const rpcUrl = "https://rpc-devnet.aws.metaplex.com/";
-  const connectionString = "https://rpc-devnet.aws.metaplex.com/";
+  const connectionString = "https://api.devnet.solana.com/";
   // set up connection object
   // provides all connection functions and rpc functions
   const connectionWrapper = new WrappedConnection(
@@ -345,10 +346,10 @@ const wholeFlow = async () => {
     rpcUrl
   );
   console.log("payer", connectionWrapper.provider.wallet.publicKey.toBase58());
-  // await connectionWrapper.requestAirdrop(
-  //   connectionWrapper.payer.publicKey,
-  //   2 * LAMPORTS_PER_SOL
-  // );
+  await connectionWrapper.requestAirdrop(
+    connectionWrapper.payer.publicKey,
+    LAMPORTS_PER_SOL / 2
+  );
   // returns filled out metadata args struct, doesn't actually do anything mint wise
   let originalCompressedNFT = makeCompressedNFT("test", "TST");
   // creates  and executes the merkle tree ix
@@ -384,7 +385,7 @@ const wholeFlow = async () => {
   sleep(120000);
   await connectionWrapper.requestAirdrop(
     newOwner.publicKey,
-    2 * LAMPORTS_PER_SOL
+    LAMPORTS_PER_SOL
   );
 
   //transferring the compressed asset to a new owner
