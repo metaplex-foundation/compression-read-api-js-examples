@@ -45,6 +45,7 @@ import {
   SPL_ACCOUNT_COMPRESSION_PROGRAM_ID,
   getConcurrentMerkleTreeAccountSize,
   SPL_NOOP_PROGRAM_ID,
+  ConcurrentMerkleTreeAccount,
 } from "@solana/spl-account-compression";
 
 const makeCompressedNFT = (
@@ -152,6 +153,7 @@ const setupTreeWithCompressedNFT = async (
 const transferAsset = async (
   connectionWrapper: WrappedConnection,
   newOwner: Keypair,
+  canopyHeight: number | undefined,
   asset?: any,
   assetProof?: any,
   assetId?: string
@@ -182,6 +184,7 @@ const transferAsset = async (
       merkleTree: new PublicKey(_assetProof.tree_id),
       logWrapper: SPL_NOOP_PROGRAM_ID,
       compressionProgram: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID,
+      anchorRemainingAccounts: assetProof.slice(0,assetProof.length - (!!canopyHeight ? canopyHeight : 0))
     },
     {
       root: bufferToArray(bs58.decode(_assetProof.root)),
@@ -202,38 +205,41 @@ const transferAsset = async (
 };
 const redeemAsset = async (
   connectionWrapper: WrappedConnection,
+  canopyHeight: number | undefined, 
   nonce = new BN(0),
   asset?: any,
-  assetProof?: any,
+  proof?: any,
   payer?: Keypair,
   assetId?: string
 ) => {
-  const _assetProof = assetProof
-    ? assetProof
-    : await connectionWrapper.getAssetProof(assetId);
-  const _asset = asset ? asset : await connectionWrapper.getAsset(assetId);
-  const voucher = await getVoucherPDA(new PublicKey(_assetProof.tree_id), 0);
+  const assetProof = proof
+    ? proof
+      //@ts-ignore
+    : await connectionWrapper.getAssetProof(assetId).proof;
+  const rpcAsset = asset ? asset : await connectionWrapper.getAsset(assetId);
+  const voucher = await getVoucherPDA(new PublicKey(assetProof.tree_id), 0);
   const treeAuthority = await getBubblegumAuthorityPDA(
-    new PublicKey(_assetProof.tree_id)
+    new PublicKey(assetProof.tree_id)
   );
-  const leafDelegate = _asset.ownership.delegate
-    ? new PublicKey(_asset.ownership.delegate)
-    : new PublicKey(_asset.ownership.owner);
+  const leafDelegate = asset.ownership.delegate
+    ? new PublicKey(asset.ownership.delegate)
+    : new PublicKey(asset.ownership.owner);
   const redeemIx = createRedeemInstruction(
     {
       treeAuthority,
-      leafOwner: new PublicKey(_asset.ownership.owner),
+      leafOwner: new PublicKey(asset.ownership.owner),
       leafDelegate,
-      merkleTree: new PublicKey(_assetProof.tree_id),
+      merkleTree: new PublicKey(assetProof.tree_id),
       voucher,
       logWrapper: SPL_NOOP_PROGRAM_ID,
       compressionProgram: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID,
+      anchorRemainingAccounts: assetProof.slice(0,assetProof.length - (!!canopyHeight ? canopyHeight : 0))
     },
     {
-      root: bufferToArray(bs58.decode(_assetProof.root)),
-      dataHash: bufferToArray(bs58.decode(_asset.compression.data_hash.trim())),
+      root: bufferToArray(bs58.decode(assetProof.root)),
+      dataHash: bufferToArray(bs58.decode(rpcAsset.compression.data_hash.trim())),
       creatorHash: bufferToArray(
-        bs58.decode(_asset.compression.creator_hash.trim())
+        bs58.decode(rpcAsset.compression.creator_hash.trim())
       ),
       nonce,
       index: 0,
@@ -250,28 +256,29 @@ const redeemAsset = async (
 
 async function decompressAsset(
   connectionWrapper: WrappedConnection,
+  canopyHeight: number | undefined,
   asset?: any,
-  assetProof?: any,
+  proof?: any,
   payer?: Keypair,
   assetId?: string
 ) {
-  const _assetProof = assetProof
-    ? assetProof
+  const assetProof = proof
+    ? proof
     : await connectionWrapper.getAssetProof(assetId);
   const _asset = asset ? asset : await connectionWrapper.getAsset(assetId);
-  const voucher = await getVoucherPDA(new PublicKey(_assetProof.tree_id), 0);
+  const voucher = await getVoucherPDA(new PublicKey(assetProof.tree_id), 0);
   const nonceCount = await getNonceCount(
     connectionWrapper.provider.connection,
-    new PublicKey(_assetProof.tree_id)
+    new PublicKey(assetProof.tree_id)
   );
   const leafNonce = nonceCount.sub(new BN(1));
 
-  await redeemAsset(connectionWrapper, leafNonce, _asset, _assetProof, payer);
+  await redeemAsset(connectionWrapper, canopyHeight, leafNonce, _asset, assetProof, payer);
 
   let [assetPDA] = await PublicKey.findProgramAddress(
     [
       Buffer.from("asset"),
-      new PublicKey(_assetProof.tree_id).toBuffer(),
+      new PublicKey(assetProof.tree_id).toBuffer(),
       leafNonce.toBuffer("le", 8),
     ],
     BUBBLEGUM_PROGRAM_ID
@@ -317,6 +324,7 @@ async function decompressAsset(
       tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       logWrapper: SPL_NOOP_PROGRAM_ID,
+      anchorRemainingAccounts: proof.slice(0,proof.length - (!!canopyHeight ? canopyHeight : 0))
     },
     {
       // this can be grabbed onChain by using the metadataArgsBeet.deserialize
@@ -334,20 +342,21 @@ async function decompressAsset(
 }
 
 const wholeFlow = async () => {
-  const rpcUrl = "https://mplx-devnet.genesysgo.net/";
-  const connectionString = "https://mplx-devnet.genesysgo.net/";
+  const rpcUrl = "https://rpc-devnet.aws.metaplex.com/";
+  const connectionString = "https://liquid.devnet.rpcpool.com/5ebea512d12be102f53d319dafc8";
   // set up connection object
   // provides all connection functions and rpc functions
   const connectionWrapper = new WrappedConnection(
-    Keypair.generate(),
+    Keypair.fromSeed(new TextEncoder().encode("hello world".padEnd(32, "\0"))),
     connectionString,
     rpcUrl
   );
-  console.log("payer", connectionWrapper.provider.wallet.publicKey.toBase58());
+  
   await connectionWrapper.requestAirdrop(
     connectionWrapper.payer.publicKey,
     LAMPORTS_PER_SOL
   );
+  console.log("payer", connectionWrapper.provider.wallet.publicKey.toBase58());
   // returns filled out metadata args struct, doesn't actually do anything mint wise
   let originalCompressedNFT = makeCompressedNFT("test", "TST");
   // creates  and executes the merkle tree ix
@@ -360,6 +369,8 @@ const wholeFlow = async () => {
     64
   );
   const merkleTree = result.merkleTree;
+  let mkAccount = await ConcurrentMerkleTreeAccount.fromAccountAddress(connectionWrapper, merkleTree);
+  let canopyHeight = mkAccount.getCanopyDepth();
   const leafIndex = new BN.BN(0);
   // grabbing the asset id so that it can be passed to transfer
   const [assetId] = await PublicKey.findProgramAddress(
@@ -387,6 +398,7 @@ const wholeFlow = async () => {
   await transferAsset(
     connectionWrapper,
     newOwner,
+    canopyHeight,
     assetPreTransfer,
     assetProofPreTransfer
   );

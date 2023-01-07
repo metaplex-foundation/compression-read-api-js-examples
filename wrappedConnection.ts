@@ -41,7 +41,7 @@ export class WrappedConnection extends Connection {
     try {
       const response = await this.axiosInstance.post("get_asset_proof", {
         jsonrpc: "2.0",
-        method: "get_asset_proof",
+        method: "getAssetProof",
         id: "rpd-op-123",
         params: [assetId],
       });
