@@ -26,6 +26,7 @@ import {
   SYSVAR_RENT_PUBKEY,
   Transaction,
   LAMPORTS_PER_SOL,
+  AccountMeta
 } from "@solana/web3.js";
 import { WrappedConnection } from "./wrappedConnection";
 import { bs58 } from "@project-serum/anchor/dist/cjs/utils/bytes";
@@ -48,6 +49,7 @@ import {
   ConcurrentMerkleTreeAccount,
 } from "@solana/spl-account-compression";
 
+Error.stackTraceLimit = Infinity;
 const makeCompressedNFT = (
   name: string,
   symbol: string,
@@ -71,6 +73,13 @@ const makeCompressedNFT = (
 
 const sleep = async (ms: any) => {
   return new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+const mapProof = (assetProof: {proof: string[]}): AccountMeta[] => {
+  if (!assetProof.proof || assetProof.proof.length === 0) {
+    throw new Error("Proof is empty");
+  }
+  return assetProof.proof.map((node) => ({pubkey: new PublicKey(node), isSigner: false, isWritable: false}))
 };
 
 /*
@@ -154,43 +163,41 @@ const transferAsset = async (
   connectionWrapper: WrappedConnection,
   newOwner: Keypair,
   canopyHeight: number | undefined,
-  asset?: any,
-  assetProof?: any,
-  assetId?: string
+  assetId: string
 ) => {
-  const _assetProof = assetProof
-    ? assetProof
-    : await connectionWrapper.getAssetProof(assetId);
-  const _asset = asset ? asset : await connectionWrapper.getAsset(assetId);
+  console.log("transfer");
+  let assetProof = await connectionWrapper.getAssetProof(assetId);
+  let proofPath = mapProof(assetProof);
+  const rpcAsset = await connectionWrapper.getAsset(assetId);
 
   const nonceCount = await getNonceCount(
     connectionWrapper.provider.connection,
-    new PublicKey(_assetProof.tree_id)
+    new PublicKey(assetProof.tree_id)
   );
 
   const leafNonce = nonceCount.sub(new BN(1));
   const treeAuthority = await getBubblegumAuthorityPDA(
-    new PublicKey(_assetProof.tree_id)
+    new PublicKey(assetProof.tree_id)
   );
-  const leafDelegate = _asset.ownership.delegate
-    ? new PublicKey(_asset.ownership.delegate)
-    : new PublicKey(_asset.ownership.owner);
+  const leafDelegate = rpcAsset.ownership.delegate
+    ? new PublicKey(rpcAsset.ownership.delegate)
+    : new PublicKey(rpcAsset.ownership.owner);
   let transferIx = createTransferInstruction(
     {
       treeAuthority,
-      leafOwner: new PublicKey(_asset.ownership.owner),
+      leafOwner: new PublicKey(rpcAsset.ownership.owner),
       leafDelegate: leafDelegate,
       newLeafOwner: newOwner.publicKey,
-      merkleTree: new PublicKey(_assetProof.tree_id),
+      merkleTree: new PublicKey(assetProof.tree_id),
       logWrapper: SPL_NOOP_PROGRAM_ID,
       compressionProgram: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID,
-      anchorRemainingAccounts: assetProof.slice(0,assetProof.length - (!!canopyHeight ? canopyHeight : 0))
+      anchorRemainingAccounts: proofPath.slice(0,proofPath.length - (!!canopyHeight ? canopyHeight : 0))
     },
     {
-      root: bufferToArray(bs58.decode(_assetProof.root)),
-      dataHash: bufferToArray(bs58.decode(_asset.compression.data_hash.trim())),
+      root: bufferToArray(bs58.decode(assetProof.root)),
+      dataHash: bufferToArray(bs58.decode(rpcAsset.compression.data_hash.trim())),
       creatorHash: bufferToArray(
-        bs58.decode(_asset.compression.creator_hash.trim())
+        bs58.decode(rpcAsset.compression.creator_hash.trim())
       ),
       nonce: leafNonce,
       index: 0,
@@ -206,34 +213,33 @@ const transferAsset = async (
 const redeemAsset = async (
   connectionWrapper: WrappedConnection,
   canopyHeight: number | undefined, 
-  nonce = new BN(0),
-  asset?: any,
-  proof?: any,
   payer?: Keypair,
-  assetId?: string
+  assetId?: string,
 ) => {
-  const assetProof = proof
-    ? proof
-      //@ts-ignore
-    : await connectionWrapper.getAssetProof(assetId).proof;
-  const rpcAsset = asset ? asset : await connectionWrapper.getAsset(assetId);
+  console.log("redeem");
+  let assetProof = await connectionWrapper.getAssetProof(assetId);
+  const rpcAsset = await connectionWrapper.getAsset(assetId);
   const voucher = await getVoucherPDA(new PublicKey(assetProof.tree_id), 0);
+  const nonceCount = await getNonceCount(
+    connectionWrapper.provider.connection,
+    new PublicKey(assetProof.tree_id)
+  );
+  const leafNonce = nonceCount.sub(new BN(1));
   const treeAuthority = await getBubblegumAuthorityPDA(
     new PublicKey(assetProof.tree_id)
   );
-  const leafDelegate = asset.ownership.delegate
-    ? new PublicKey(asset.ownership.delegate)
-    : new PublicKey(asset.ownership.owner);
+  const leafDelegate = rpcAsset.ownership.delegate
+    ? new PublicKey(rpcAsset.ownership.delegate)
+    : new PublicKey(rpcAsset.ownership.owner);
   const redeemIx = createRedeemInstruction(
     {
       treeAuthority,
-      leafOwner: new PublicKey(asset.ownership.owner),
+      leafOwner: new PublicKey(rpcAsset.ownership.owner),
       leafDelegate,
       merkleTree: new PublicKey(assetProof.tree_id),
       voucher,
       logWrapper: SPL_NOOP_PROGRAM_ID,
       compressionProgram: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID,
-      anchorRemainingAccounts: assetProof.slice(0,assetProof.length - (!!canopyHeight ? canopyHeight : 0))
     },
     {
       root: bufferToArray(bs58.decode(assetProof.root)),
@@ -241,7 +247,7 @@ const redeemAsset = async (
       creatorHash: bufferToArray(
         bs58.decode(rpcAsset.compression.creator_hash.trim())
       ),
-      nonce,
+      nonce: leafNonce,
       index: 0,
     }
   );
@@ -257,15 +263,13 @@ const redeemAsset = async (
 async function decompressAsset(
   connectionWrapper: WrappedConnection,
   canopyHeight: number | undefined,
-  asset?: any,
-  proof?: any,
   payer?: Keypair,
   assetId?: string
 ) {
-  const assetProof = proof
-    ? proof
-    : await connectionWrapper.getAssetProof(assetId);
-  const _asset = asset ? asset : await connectionWrapper.getAsset(assetId);
+  console.log("decompress ", assetId);
+  let assetProof = await connectionWrapper.getAssetProof(assetId);
+  let proofPath = mapProof(assetProof);
+  const rpcAsset = await connectionWrapper.getAsset(assetId);
   const voucher = await getVoucherPDA(new PublicKey(assetProof.tree_id), 0);
   const nonceCount = await getNonceCount(
     connectionWrapper.provider.connection,
@@ -273,7 +277,7 @@ async function decompressAsset(
   );
   const leafNonce = nonceCount.sub(new BN(1));
 
-  await redeemAsset(connectionWrapper, canopyHeight, leafNonce, _asset, assetProof, payer);
+  await redeemAsset(connectionWrapper, canopyHeight, payer, assetId);
 
   let [assetPDA] = await PublicKey.findProgramAddress(
     [
@@ -289,21 +293,21 @@ async function decompressAsset(
   );
 
   sleep(20000);
-  const assetAgain = await connectionWrapper.getAsset(asset.id);
+  const assetAgain = await connectionWrapper.getAsset(rpcAsset.id);
 
   const metadata: MetadataArgs = {
-    name: _asset.content.metadata.name,
-    symbol: _asset.content.metadata.symbol,
-    uri: _asset.content.json_uri,
-    sellerFeeBasisPoints: _asset.royalty.basis_points,
-    primarySaleHappened: _asset.royalty.primary_sale_happened,
-    isMutable: _asset.mutable,
-    editionNonce: _asset.supply.edition_nonce,
+    name: rpcAsset.content.metadata.name,
+    symbol: rpcAsset.content.metadata.symbol,
+    uri: rpcAsset.content.json_uri,
+    sellerFeeBasisPoints: rpcAsset.royalty.basis_points,
+    primarySaleHappened: rpcAsset.royalty.primary_sale_happened,
+    isMutable: rpcAsset.mutable,
+    editionNonce: rpcAsset.supply.edition_nonce,
     tokenStandard: TokenStandard.NonFungible,
-    collection: _asset.grouping,
-    uses: _asset.uses,
+    collection: rpcAsset.grouping,
+    uses: rpcAsset.uses,
     tokenProgramVersion: TokenProgramVersion.Original,
-    creators: _asset.creators,
+    creators: rpcAsset.creators,
   };
 
   const decompressIx = createDecompressV1Instruction(
@@ -324,11 +328,9 @@ async function decompressAsset(
       tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       logWrapper: SPL_NOOP_PROGRAM_ID,
-      anchorRemainingAccounts: proof.slice(0,proof.length - (!!canopyHeight ? canopyHeight : 0))
+      anchorRemainingAccounts: proofPath.slice(0,proofPath.length - (!!canopyHeight ? canopyHeight : 0))
     },
     {
-      // this can be grabbed onChain by using the metadataArgsBeet.deserialize
-      // currently there is an error inside beet program while using it
       metadata,
     }
   );
@@ -352,10 +354,10 @@ const wholeFlow = async () => {
     rpcUrl
   );
   
-  await connectionWrapper.requestAirdrop(
-    connectionWrapper.payer.publicKey,
-    LAMPORTS_PER_SOL
-  );
+  // await connectionWrapper.requestAirdrop(
+  //   connectionWrapper.payer.publicKey,
+  //   LAMPORTS_PER_SOL
+  // );
   console.log("payer", connectionWrapper.provider.wallet.publicKey.toBase58());
   // returns filled out metadata args struct, doesn't actually do anything mint wise
   let originalCompressedNFT = makeCompressedNFT("test", "TST");
@@ -384,37 +386,35 @@ const wholeFlow = async () => {
 
   await sleep(15000);
   const assetString = assetId.toBase58();
-  const assetPreTransfer = await connectionWrapper.getAsset(assetString);
-  const assetProofPreTransfer = await connectionWrapper.getAssetProof(
-    assetString
-  );
-
   const newOwner = Keypair.generate();
   console.log("new owner", newOwner.publicKey.toBase58());
   sleep(120000);
-  await connectionWrapper.requestAirdrop(newOwner.publicKey, LAMPORTS_PER_SOL);
+  
+  await execute(
+    connectionWrapper.provider,
+    [SystemProgram.transfer({fromPubkey: connectionWrapper.provider.publicKey, toPubkey: newOwner.publicKey, lamports: LAMPORTS_PER_SOL})],
+    [connectionWrapper.payer],
+    true
+  );
 
   //transferring the compressed asset to a new owner
   await transferAsset(
     connectionWrapper,
     newOwner,
     canopyHeight,
-    assetPreTransfer,
-    assetProofPreTransfer
+    assetString
   );
   // asset has to be redeemed before it can be decompressed
   // redeem is included above as a separate function because it can be called
   // without decompressing nftbut it is also called
   // inside of decompress so we don't need to call that separately here
   sleep(15000);
-  // need to refetch from DB to get new owner change of ownership.owner
-  const asset = await connectionWrapper.getAsset(assetString);
-  const assetProof = await connectionWrapper.getAssetProof(assetString);
+  
   await decompressAsset(
     connectionWrapper,
-    asset,
-    assetProof,
-    connectionWrapper.payer
+    canopyHeight,
+    newOwner,
+    assetString
   );
 };
 
