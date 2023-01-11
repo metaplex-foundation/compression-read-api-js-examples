@@ -27,9 +27,11 @@ export class WrappedConnection extends Connection {
     try {
       const response = await this.axiosInstance.post("get_asset", {
         jsonrpc: "2.0",
-        method: "get_asset",
+        method: "getAsset",
         id: "rpd-op-123",
-        params: [assetId],
+        params: {
+          id: assetId
+        },
       });
       return response.data.result;
     } catch (error) {
@@ -43,7 +45,9 @@ export class WrappedConnection extends Connection {
         jsonrpc: "2.0",
         method: "getAssetProof",
         id: "rpd-op-123",
-        params: [assetId],
+        params: {
+          id: assetId
+        },
       });
       return response.data.result;
     } catch (error) {

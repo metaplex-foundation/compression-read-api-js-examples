@@ -1,7 +1,4 @@
-import {
-  PROGRAM_ID,
-  TreeConfig,
-} from "@metaplex-foundation/mpl-bubblegum";
+import { PROGRAM_ID, TreeConfig } from "@metaplex-foundation/mpl-bubblegum";
 import {
   Connection,
   PublicKey,
