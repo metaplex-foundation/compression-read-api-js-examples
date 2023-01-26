@@ -2,11 +2,11 @@ import { makeCompressedNFT } from "./helpers";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { WrappedConnection } from "./wrappedConnection";
 import { createTree, createCollection, createNft } from "./lib";
+import {RPC_URL, CONNECTION_STRING} from "./constants";
 
 const compression = async () => {
-  const rpcUrl = "https://rpc-devnet.aws.metaplex.com/";
-  const connectionString =
-    "https://liquid.devnet.rpcpool.com/5ebea512d12be102f53d319dafc8";
+  const rpcUrl = RPC_URL;
+  const connectionString = CONNECTION_STRING;
 
     const connectionWrapper = new WrappedConnection(
     Keypair.fromSeed(new TextEncoder().encode("hello world".padEnd(32, "\0"))),
