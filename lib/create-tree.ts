@@ -10,19 +10,24 @@ import {
   getConcurrentMerkleTreeAccountSize,
   SPL_NOOP_PROGRAM_ID,
 } from "@solana/spl-account-compression";
+import { RPC_URL, CONNECTION_STRING } from "../constants";
 
-export const createTree = async (
-  connectionWrapper: WrappedConnection,
-  payerKeypair: Keypair,
-  maxDepth: number = 14,
-  maxBufferSize: number = 64
-) => {
-  const payer = payerKeypair.publicKey;
+export const createTree = async (payer: Keypair) => {
+  const rpcUrl = RPC_URL;
+  const connectionString = CONNECTION_STRING;
+  const maxDepth = 14;
+  const maxBufferSize = 64;
+
+  const connectionWrapper = new WrappedConnection(
+    payer,
+    connectionString,
+    rpcUrl
+  );
   const merkleTreeKeypair = Keypair.generate();
   const merkleTree = merkleTreeKeypair.publicKey;
   const space = getConcurrentMerkleTreeAccountSize(maxDepth, maxBufferSize, 5);
   const allocTreeIx = SystemProgram.createAccount({
-    fromPubkey: payer,
+    fromPubkey: payer.publicKey,
     newAccountPubkey: merkleTree,
     lamports: await connectionWrapper.getMinimumBalanceForRentExemption(space),
     space: space,
@@ -36,8 +41,8 @@ export const createTree = async (
     {
       merkleTree,
       treeAuthority,
-      treeCreator: payer,
-      payer,
+      treeCreator: payer.publicKey,
+      payer: payer.publicKey,
       logWrapper: SPL_NOOP_PROGRAM_ID,
       compressionProgram: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID,
     },
@@ -51,7 +56,7 @@ export const createTree = async (
   await execute(
     connectionWrapper.provider,
     [allocTreeIx, createTreeIx],
-    [merkleTreeKeypair, payerKeypair]
+    [merkleTreeKeypair, payer]
   );
 
   return merkleTree;
